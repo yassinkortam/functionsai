@@ -1,7 +1,8 @@
 import pytest
 import pandas as pd
-from functionsai import Function
-from functionsai import Module
+import functionsai as fai
+from functionsai import FunctionsAI, Function, Module
+import inspect
 
 
 @pytest.fixture
@@ -32,21 +33,14 @@ def function_without_prompt(function):
 
 @pytest.fixture
 def module():
-    class TestModule:
-        def plot(x: pd.Series) -> None:
-            """
-            This function plots a graph given a timeseries.
-            """
-            x.plot()
-
-    return TestModule
-
-
-@pytest.fixture
-def module_with_prompt(module, prompts):
-    return Module(module, prompts)
+    return fai
 
 
 @pytest.fixture
 def module_without_prompt(module):
     return Module(module)
+
+
+@pytest.fixture
+def functionsai(function):
+    return FunctionsAI(fai, function)
