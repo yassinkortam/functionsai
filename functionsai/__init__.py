@@ -1,11 +1,11 @@
 """
 """
-import spacy
 import inspect
 from types import ModuleType
 from typing import Callable, List, Tuple
 from .functions import Function
 from .modules import Module
+from .scoring import Scoring
 
 
 class FunctionsAI:
@@ -16,7 +16,7 @@ class FunctionsAI:
 
     _functions: List[Function]
     _modules: List[Module]
-    _nlp: spacy.Language
+    _scoring: Scoring = Scoring()
 
     def __init__(self, *args) -> None:
         """
@@ -27,103 +27,40 @@ class FunctionsAI:
         self._modules = []
         for arg in args:
             if isinstance(arg, ModuleType):
-                self._modules.append(Module(arg))
+                module = Module(arg)
+                self._modules.append(module)
+                for function in module.functions:
+                    self._functions.append(Function(function))
             elif inspect.isfunction(arg):
                 self._functions.append(Function(arg))
             else:
                 raise TypeError(
                     "FunctionsAI only accepts Modules and Functions"
                 )
-        self._nlp = spacy.load("en_core_web_sm")
 
-    def _score_function(self, function: Function, prompt: str) -> float:
+    def sort(self, prompt: str) -> List[Tuple[Function, float]]:
         """
-        Determine the relevancy score based on the verbs and proper nouns in the prompt.
+        Sort the functions by their similarity to the prompt.
 
         Args:
-            function (Function): The function to check.
-            prompt (str): The user's query or prompt.
+            prompt (str): The user's prompt.
 
         Returns:
-            float: Relevancy score between 0 (not relevant) and 1 (highly relevant).
+            List[Tuple[Function, float]]: A list of functions and their similarity scores.
         """
-        doc = self._nlp(prompt)
 
-        # Extract verbs and proper nouns from the prompt
-        verbs = [token.lemma_ for token in doc if token.pos_ == "VERB"]
-        proper_nouns = [token.lemma_ for token in doc if token.pos_ == "PROPN"]
+        # Score all functions at once
+        similarity_scores = self.scoring.score(self.functions, prompt)
 
-        # Check if proper nouns match function name
-        name_match = (
-            1 if any(noun in function.name for noun in proper_nouns) else 0
+        # Pair functions with their scores
+        paired_functions_scores = zip(self.functions, similarity_scores)
+
+        # Sort the pairs by score
+        sorted_pairs = sorted(
+            paired_functions_scores, key=lambda x: x[1], reverse=True
         )
 
-        # Check for verb matches in function description
-        verb_match_score = sum(
-            1 for verb in verbs if verb in function.description
-        ) / (len(verbs) if verbs else 1)
-
-        # The score is a combination of the name match and verb match
-        # The weights (0.7 and 0.3) can be adjusted based on preference
-        score = 0.7 * name_match + 0.3 * verb_match_score
-
-        return score
-
-    def _sort_functions(
-        self, prompt: str, score: Callable
-    ) -> List[Tuple[Function, float]]:
-        """
-        Search through all functions and modules to find the most relevant functions given a prompt.
-
-        Args:
-            prompt (str): The user's query or prompt.
-            score_function (Callable): Function to determine relevancy score.
-
-        Returns:
-            List[Tuple[Function, float]]: A sorted list of functions with their respective scores.
-        """
-
-        scored_functions = []
-
-        def decision_tree(
-            module: Module, prompt: str
-        ) -> List[Tuple[Function, float]]:
-            local_scores = []
-
-            for function in module.functions:
-                func_score = score(function, prompt)
-                local_scores.append((function, func_score))
-
-            for submodule in module.submodules:
-                relevant_functions = decision_tree(submodule, prompt)
-                # Combine submodule's score with function scores inside it
-                local_scores.extend([(f, s) for f, s in relevant_functions])
-
-            return local_scores
-
-        for function in self._functions:
-            func_score = score(function, prompt)
-            scored_functions.append((function, func_score))
-
-        for module in self._modules:
-            scored_functions.extend(decision_tree(module, prompt))
-
-        # Sort by score in descending order
-        scored_functions.sort(key=lambda x: x[1], reverse=True)
-
-        return scored_functions
-
-    def sort_functions(self, prompt: str) -> List[Tuple[Function, float]]:
-        """
-        Search through all functions and modules to find the most relevant functions given a prompt.
-
-        Args:
-            prompt (str): The user's query or prompt.
-
-        Returns:
-            List[Tuple[Function, float]]: A sorted list of functions with their respective scores.
-        """
-        return self._sort_functions(prompt, self._score_function)
+        return sorted_pairs
 
     @property
     def functions(self) -> List[Function]:
@@ -141,5 +78,21 @@ class FunctionsAI:
         """
         return self._modules
 
+    @property
+    def scoring(self) -> Scoring:
+        """
+        Returns:
+            Scoring: The scoring object.
+        """
+        return self._scoring
 
-__all__ = ["FunctionsAI", "Function", "Module"]
+    @scoring.setter
+    def scoring(self, scoring: Scoring) -> None:
+        """
+        Args:
+            scoring (Scoring): The scoring object.
+        """
+        self._scoring = scoring
+
+
+__all__ = ["FunctionsAI", "Function", "Module", "Scoring"]

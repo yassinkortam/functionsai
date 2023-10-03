@@ -8,14 +8,13 @@ from ..functions import Function
 
 class Module:
     """
-    The Module class maps a module to a name, description, its functions, and its submodules.
+    The Module class maps a module to a name, description, and its functions.
     """
 
     _name: str
     _description: str
     _module: ModuleType
     _functions: List[Function]
-    _submodules: List["Module"]
     _prompts: List[str] = None
 
     def __init__(self, module: ModuleType, prompts: List[str] = None) -> None:
@@ -28,18 +27,7 @@ class Module:
         self._description = module.__doc__
         self._module = module
         self._functions = []
-        self._submodules = []
-
-        for name, member in inspect.getmembers(module):
-            if name.startswith("_"):
-                continue
-            if inspect.isfunction(member):
-                self._functions.append(Function(member))
-            elif inspect.ismodule(member) and member.__name__.startswith(
-                module.__name__
-            ):  # To ensure it's a submodule
-                self._submodules.append(Module(member))
-
+        self._functions = self._get_functions(module)
         self._prompts = prompts
 
     def __eq__(self, other):
@@ -49,18 +37,40 @@ class Module:
         functions_equal = all(
             f1 == f2 for f1, f2 in zip(self.functions, other.functions)
         )
-        submodules_equal = all(
-            m1 == m2 for m1, m2 in zip(self.submodules, other.submodules)
-        )
 
         return (
             self.name == other.name
             and self.description == other.description
             and self.module == other.module
             and functions_equal
-            and submodules_equal
             and self.prompts == other.prompts
         )
+
+    def _get_functions(self, module):
+        """
+        Gets all functions in a module.
+
+        Args:
+            module (ModuleType): The module to be analyzed.
+
+        Returns:
+            List[Function]: A list of functions in the module.
+        """
+        functions = []
+
+        def get_all_functions(module):
+            for name, obj in inspect.getmembers(module):
+                if inspect.isfunction(obj) and not name.startswith("_"):
+                    functions.append(obj)
+                else:
+                    try:
+                        if obj.__module__.startswith(module.__name__):
+                            get_all_functions(obj)
+                    except AttributeError:
+                        continue
+
+        get_all_functions(module)
+        return functions
 
     @property
     def name(self) -> str:
@@ -93,14 +103,6 @@ class Module:
             List[Function]: A list of functions in the module.
         """
         return self._functions
-
-    @property
-    def submodules(self) -> List["Module"]:
-        """
-        Returns:
-            List[Module]: A list of submodules in the module.
-        """
-        return self._submodules
 
     @property
     def prompts(self) -> List[str]:

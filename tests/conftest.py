@@ -1,7 +1,7 @@
 import pytest
 import pandas as pd
 import functionsai as fai
-from functionsai import FunctionsAI, Function, Module
+from functionsai import FunctionsAI, Function, Module, Scoring
 import inspect
 
 
