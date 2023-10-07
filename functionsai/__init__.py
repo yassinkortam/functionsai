@@ -1,5 +1,6 @@
 """
 """
+import spacy
 import inspect
 from types import ModuleType
 from typing import Callable, List, Tuple
@@ -16,6 +17,7 @@ class FunctionsAI:
 
     _functions: List[Function]
     _modules: List[Module]
+    _nlp: spacy.language.Language = spacy.load("en_core_web_sm")
     _scoring: Scoring = Scoring()
 
     def __init__(self, *args) -> None:
@@ -38,6 +40,18 @@ class FunctionsAI:
                     "FunctionsAI only accepts Modules and Functions"
                 )
 
+        for function in self.functions:
+            if function.description is not None:
+                function.description_vector = self._nlp(
+                    function.description
+                ).vector
+
+        for function in self.functions:
+            if function.prompts is not None:
+                function.prompts_vector = [
+                    self._nlp(prompt).vector for prompt in function.prompts
+                ]
+
     def sort(self, prompt: str) -> List[Tuple[Function, float]]:
         """
         Sort the functions by their similarity to the prompt.
@@ -48,19 +62,52 @@ class FunctionsAI:
         Returns:
             List[Tuple[Function, float]]: A list of functions and their similarity scores.
         """
-
-        # Score all functions at once
-        similarity_scores = self.scoring.score(self.functions, prompt)
-
-        # Pair functions with their scores
+        prompt_vector = self._nlp(prompt).vector
+        similarity_scores = self.scoring.score(
+            prompt, prompt_vector, self.functions
+        )
         paired_functions_scores = zip(self.functions, similarity_scores)
-
-        # Sort the pairs by score
         sorted_pairs = sorted(
             paired_functions_scores, key=lambda x: x[1], reverse=True
         )
 
         return sorted_pairs
+
+    def top(self, prompt: str, top: int = 5) -> List[Function]:
+        """
+        Search the functions and modules for the most relevant functions.
+
+        Args:
+            prompt (str): The user's prompt.
+            top (int, optional): The number of functions to return. Defaults to 5.
+
+        Returns:
+            List[Function]: A list of the most relevant functions.
+        """
+        sorted_pairs = self.sort(prompt)
+        matches = [pair[0] for pair in sorted_pairs[:top]]
+        return [
+            {
+                "name": match.name,
+                "description": match.description,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        param.name: {
+                            "type": param.type,
+                            "description": param.description,
+                        }
+                        for param in match.params
+                    },
+                    "required": [
+                        param.name
+                        for param in match.params
+                        if param.is_required
+                    ],
+                },
+            }
+            for match in matches
+        ]
 
     @property
     def functions(self) -> List[Function]:

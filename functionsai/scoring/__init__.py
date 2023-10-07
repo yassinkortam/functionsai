@@ -1,7 +1,7 @@
 """
 """
+import numpy as np
 from typing import Callable, List
-from .description import SentenceTransformerEmbedder
 from ..functions import Function
 from . import description
 from . import name
@@ -29,18 +29,20 @@ class Scoring:
         self._name_scoring = name_scoring
         self._description_scoring = description_scoring
         self._prompt_scoring = prompt_scoring
-        self._embedder = SentenceTransformerEmbedder()
 
-    def score(self, functions: List[Function], prompt: str) -> List[float]:
+    def score(
+        self, prompt: str, prompt_vec: np.ndarray, functions: List[Function]
+    ) -> np.ndarray:
         """
         Score the similarity of a batch of functions to a prompt.
 
         Args:
-            functions (List[Function]): The list of functions to be scored.
             prompt (str): The user's prompt.
+            prompt_vector (np.ndarray): The vector representation of the prompt.
+            functions (List[Function]): The list of functions to be scored.
 
         Returns:
-            List[float]: The list of similarity scores for each function.
+            np.ndarray: The list of similarity scores for each function.
         """
 
         # Initialize scores with zeros
@@ -68,7 +70,7 @@ class Scoring:
         if functions_with_descriptions:
             description_scores_for_described_functions = (
                 self._description_scoring(
-                    prompt, functions_with_descriptions, self._embedder
+                    prompt_vec, functions_with_descriptions
                 )
             )
             for func, score in zip(
@@ -85,7 +87,7 @@ class Scoring:
         ]
         if functions_with_prompts:
             prompt_scores_for_prompted_functions = self._prompt_scoring(
-                prompt, functions_with_prompts
+                prompt_vec, functions_with_prompts
             )
             for func, score in zip(
                 functions_with_prompts, prompt_scores_for_prompted_functions
